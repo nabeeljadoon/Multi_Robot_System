@@ -3,6 +3,13 @@
 ## Project Overview
 This project explores **multi-robot cooperation and coordination strategies** to enhance robotic collaboration in real-world scenarios. The system incorporates **resource allocation, heterogeneous robot communication, and task execution** in dynamic environments.
 
+## Tools Required
+- MATLAB (2023a version was used here)
+- Python3
+- Coppiliasim
+- MinG64 Compiler (used 32 bit if it suits)
+- Cmake Pipeline
+
 ## Features
 - **Autonomous Multi-Robot Task Allocation** using AI-driven strategies.
 - **Communication & Coordination** among heterogeneous robots.
