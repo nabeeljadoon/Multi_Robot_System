@@ -1,0 +1,110 @@
+-- This script runs in a thread. You can also use a non-threaded script instead
+
+-- Following commands are implemented:
+--
+-- k3Handle=simExtK3_create(table_2 wheelMotorHandles,table_2 colorSensorHandles,table_9 IrSensorHandles,table_5 usSensorHandles,table_6 armMotorHandles,table_3 fingerMotorHandles,table_2 gripperDistSensHandles,table_2 gripperColSensHandles,number uiHandle) 
+-- boolean result=simExtK3_destroy(number k3Handle)
+-- distance_inMeters=simExtK3_getInfrared(k3Handle,index_of_ir_sensor_0_to_8)
+-- distance_inMeters=simExtK3_getUltrasonic(k3Handle,index_of_us_sensor_0_to_5)
+-- intensity_0_to_1=simExtK3_getLineSensor(k3Handle,index_of_line_sensor_0_to_1)
+-- distance_inMeters=simExtK3_getGripperProxSensor(k3Handle,index_of_finger_prox_sensor_0_to_1)
+-- boolean result=simExtK3_setVelocity(k3Handle,velocityLeft_radPerSec,velocityRight_radPerSec)
+-- boolean result=simExtK3_setArmPosition(k3Handle,position_300_to_900)
+-- boolean result=simExtK3_setGripperGap(k3Handle,gap_0_to_170)
+
+threadFunction=function()
+    while simGetSimulationState()~=sim_simulation_advancing_abouttostop do
+        if (simExtK3_getLineSensor(k3Handle,0)>0.5) then 
+            velLeft=maxVel         -- left sensor intensity > 0.5
+        else
+            velLeft=maxVel*0.5    -- left sensor intensity <= 0.5
+        end
+
+        if (simExtK3_getLineSensor(k3Handle,1)>0.5) then 
+            velRight=maxVel        -- right sensor intensity > 0.5
+        else
+            velRight=maxVel*0.5    -- right sensor intensity <= 0.5
+        end
+
+        simExtK3_setVelocity(k3Handle,velLeft,velRight) -- Set desired left and right motor velocities
+
+        if (simExtK3_getGripperProxSensor(k3Handle,0)<0.015)or(simExtK3_getGripperProxSensor(k3Handle,1)<0.015) then
+            -- Something was detected between the fingers
+            simExtK3_setGripperGap(k3Handle,0) -- close the fingers
+            simExtK3_setArmPosition(k3Handle,900) -- move the arm up
+        end
+    end
+end
+
+-- Initialization:
+-- Check if the required extension module is there:
+-- ************************************************
+moduleName=0
+moduleVersion=0
+index=0
+kheperaModuleNotFound=true
+while moduleName do
+    moduleName,moduleVersion=simGetModuleName(index)
+    if (moduleName=='K3') then
+        kheperaModuleNotFound=false
+    end
+    index=index+1
+end
+if (kheperaModuleNotFound) then
+    simDisplayDialog('Error','Khepera3 plugin was not found. (v_repExtK3.dll)&&nSimulation will not run properly',sim_dlgstyle_ok,true,nil,{0.8,0,0,0,0,0},{0.5,0,0,1,1,1})
+end
+-- ************************************************
+
+-- Create the K3 object:
+local wheelMotorHandles={simGetObjectHandle('K3_leftWheelMotor'),simGetObjectHandle('K3_rightWheelMotor')}
+local colorSensorHandles={simGetObjectHandle('K3_colorSensorLeft'),simGetObjectHandle('K3_colorSensorRight')}
+local irSensorHandles={}
+for i=1,9,1 do
+    irSensorHandles[#irSensorHandles+1]=simGetObjectHandle('K3_infraredSensor'..i)
+end
+local usSensorHandles={}
+for i=1,5,1 do
+    usSensorHandles[#usSensorHandles+1]=simGetObjectHandle('K3_ultrasonicSensor'..i)
+end
+local armMotorHandles={-1,-1,-1,-1,-1,-1}
+armMotorHandles[1]=simGetObjectHandle('K3_gripper_armJoint1')
+armMotorHandles[2]=simGetObjectHandle('K3_gripper_armJoint2')
+armMotorHandles[3]=simGetObjectHandle('K3_gripper_armAuxJoint1')
+armMotorHandles[4]=simGetObjectHandle('K3_gripper_armAuxJoint2')
+armMotorHandles[5]=simGetObjectHandle('K3_gripper_armAuxJoint3')
+armMotorHandles[6]=simGetObjectHandle('K3_gripper_armAuxJoint4')
+local fingerMotorHandles={-1,-1,-1}
+fingerMotorHandles[1]=simGetObjectHandle('K3_gripper_fingers')
+fingerMotorHandles[2]=simGetObjectHandle('K3_gripper_fingersAux')
+fingerMotorHandles[3]=simGetObjectHandle('K3_gripper_fingersAux0')
+local gripperDistSensHandles={simGetObjectHandle('K3_gripper_leftDistanceSensor'),simGetObjectHandle('K3_gripper_rightDistanceSensor')}
+local gripperColSensHandles={simGetObjectHandle('K3_gripper_leftColorSensor'),simGetObjectHandle('K3_gripper_rightColorSensor')}
+local uiHandle=simGetUIHandle('K3_stateVisualization')
+
+k3Handle=simExtK3_create(wheelMotorHandles,colorSensorHandles,irSensorHandles,usSensorHandles,armMotorHandles,fingerMotorHandles,gripperDistSensHandles,gripperColSensHandles,uiHandle)
+
+
+simExtK3_setVelocity(k3Handle,6,6) -- set target velocity to 6 rad/sec for each wheel
+simWait(5) -- Wait 5 seconds
+simExtK3_setVelocity(k3Handle,0,0) -- stop
+simWait(1) -- Wait 1 second
+simExtK3_setGripperGap(k3Handle,0) -- close the fingers
+simWait(2) -- Wait 2 seconds
+simExtK3_setGripperGap(k3Handle,170) -- open the fingers
+simWait(2) -- Wait 2 seconds
+simExtK3_setArmPosition(k3Handle,300) -- put the arm down
+simWait(6) -- Wait 6 seconds
+
+-- Now follow the black line and grasp an object:
+maxVel=2*math.pi
+
+-- Here we execute the regular thread code:
+res,err=xpcall(threadFunction,function(err) return debug.traceback(err) end)
+if not res then
+    simAddStatusbarMessage('Lua runtime error: '..err)
+end
+
+-- Clean-up:
+-- Destroy the K3 object:
+simExtK3_destroy(k3Handle)
+

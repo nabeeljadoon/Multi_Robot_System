@@ -1,0 +1,706 @@
+-- This script runs in a thread. You can also use a non-threaded script instead
+
+-- Following commands are implemented:
+--
+-- k3Handle=simExtK3_create(table_2 wheelMotorHandles,table_2 colorSensorHandles,table_9 IrSensorHandles,table_5 usSensorHandles,table_6 armMotorHandles,table_3 fingerMotorHandles,table_2 gripperDistSensHandles,table_2 gripperColSensHandles,number uiHandle) 
+-- boolean result=simExtK3_destroy(number k3Handle)
+-- distance_inMeters=simExtK3_getInfrared(k3Handle,index_of_ir_sensor_0_to_8)
+-- distance_inMeters=simExtK3_getUltrasonic(k3Handle,index_of_us_sensor_0_to_5)
+-- intensity_0_to_1=simExtK3_getLineSensor(k3Handle,index_of_line_sensor_0_to_1)
+-- distance_inMeters=simExtK3_getGripperProxSensor(k3Handle,index_of_finger_prox_sensor_0_to_1)
+-- boolean result=simExtK3_setVelocity(k3Handle,velocityLeft_radPerSec,velocityRight_radPerSec)
+-- boolean result=simExtK3_setArmPosition(k3Handle,position_300_to_900)
+-- boolean result=simExtK3_setGripperGap(k3Handle,gap_0_to_170)
+
+--this one is working properly, Probably best to copy paste this code into others while leaving copy of the others
+
+p = {current_x = -1.8, old_x = -1.8, current_y = -1.50,old_y = -1.50, current_head = math.pi/2, old_head = math.pi/2}
+p0 = {current_x = 0.0186, old_x = 0.0186, current_y = -0.5776, old_y = -0.5776, current_head = math.pi/2, old_head = math.pi/2}
+p1 = {current_x = 0, old_x = 0, current_y = 0, old_y = 0, current_head = math.pi/2, old_head = math.pi/2}
+p2 = {current_x = 0, old_x = 0, current_y = 0, old_y = 0, current_head = math.pi/2, old_head = math.pi/2}
+goal = {current_x = -1, old_x = -1, current_y = -0.5, old_y = -0.5, current_head = math.pi/2, old_head = math.pi/2}
+
+i = 1
+T = 0.025
+WHEEL_DISTANCE = 0.08841
+KSPEED = 144.01
+
+count0_x = 0
+count0_y = 0
+count0_head = 0
+
+r_goal = 0.1
+s_goal = 2
+alpha_goal = 0.1
+
+r_robot = 0.5
+s_robot = 2
+alpha_robot = 0.15
+
+zeta = 1
+beta = 500
+
+x_goal = 0
+y_goal = 0
+
+heading_flag = 0
+heading_flag_0 = 0
+heading_flag_1 = 0
+heading_flag_2 = 0
+
+communicationFunction=function()
+
+        -- communicate the data
+        simSendData(sim_handle_all, 0, "R_x", p.current_x, sim_handle_self)
+        simSendData(sim_handle_all, 0, "G_x", goal.current_x, sim_handle_self)
+        if tonumber(formation_ready) == 1 then
+            simSendData(sim_handle_all, 0, "F", tostring(formation_ready), sim_handle_self)
+        end
+        p0.current_x = simReceiveData("0", "R0_x",sim_handle_self)
+        p1.current_x = simReceiveData("0", "R1_x",sim_handle_self)
+        p2.current_x = simReceiveData("0", "R2_x",sim_handle_self)
+        heading_flag_0 = simReceiveData("0", "heading_flag_0",sim_handle_self)
+        heading_flag_1 = simReceiveData("0", "heading_flag_1",sim_handle_self)
+        heading_flag_2 = simReceiveData("0", "heading_flag_2",sim_handle_self)
+        --if heading_flag == 1 then
+            simSendData(sim_handle_all, 0, "heading_flag", tostring(heading_flag), sim_handle_self)
+        --end
+        simSendData(sim_handle_all, 0, "R_y", p.current_y, sim_handle_self)
+        simSendData(sim_handle_all, 0, "G_y", goal.current_y, sim_handle_self)
+        p0.current_y = simReceiveData("0", "R0_y",sim_handle_self)
+        p1.current_y = simReceiveData("0", "R1_y",sim_handle_self)
+        p2.current_y = simReceiveData("0", "R2_y",sim_handle_self)
+        simSendData(sim_handle_all, 0, "R_h", p.current_head, sim_handle_self)
+        simSendData(sim_handle_all, 0, "G_h", goal.current_head, sim_handle_self)
+        p0.current_head = simReceiveData("0", "R0_h",sim_handle_self)
+        p1.current_head = simReceiveData("0", "R1_h",sim_handle_self)
+        p2.current_head = simReceiveData("0", "R2_h",sim_handle_self)
+
+        if p0.current_x == nil then
+            p0.current_x = p0.old_x
+        end
+        if p0.current_y == nil then
+            p0.current_y = p0.old_y
+        end
+        if p0.current_head == nil then
+            p0.current_head = p0.old_head
+        end
+
+        if p1.current_x == nil then
+            p1.current_x = p1.old_x
+        end
+        if p1.current_y == nil then
+            p1.current_y = p1.old_y
+        end
+        if p1.current_head == nil then
+            p1.current_head = p1.old_head
+        end
+
+        if p2.current_x == nil then
+            p2.current_x = p2.old_x
+        end
+        if p2.current_y == nil then
+            p2.current_y = p2.old_y
+        end
+        if p2.current_head == nil then
+            p2.current_head = p2.old_head
+        end
+
+        if heading_flag_0 == nil then
+            heading_flag_0 = 0
+        end
+
+        if heading_flag_1 == nil then
+            heading_flag_1 = 0
+        end
+
+        if heading_flag_2 == nil then
+            heading_flag_2 = 0
+        end
+
+        heading_flag_0 = tonumber(heading_flag_0)
+        heading_flag_1 = tonumber(heading_flag_1)
+        heading_flag_2 = tonumber(heading_flag_2)
+        heading_flag = tonumber(heading_flag)
+
+
+        p0.old_x = p0.current_x
+        p0.old_y = p0.current_y
+        p0.old_head = p0.current_head 
+
+        p1.old_x = p1.current_x
+        p1.old_y = p1.current_y
+        p1.old_head = p1.current_head 
+
+        p2.old_x = p2.current_x
+        p2.old_y = p2.current_y
+        p2.old_head = p2.current_head 
+
+end
+
+odometryFunction=function() 
+
+        local currentPos_left =simExtK3_getEncoder(k3Handle, 0)             --read left encoder
+        local currentPos_right =simExtK3_getEncoder(k3Handle, 1)            --read right encoder
+
+        local d_left = ((currentPos_left-oldPos_left) * 0.04629)/1000        --get the equivalent distance travelled
+        local d_right = ((currentPos_right-oldPos_right) * 0.04629)/1000
+
+        local v_actual = (d_left + d_right)/(2*T)
+        local W_actual = (d_right - d_left)/(T*WHEEL_DISTANCE)
+
+        --Euler Eqns updating position
+        p.current_x = p.current_x + T*v_actual*math.cos(p.current_head);
+        p.current_y = p.current_y + T*v_actual*math.sin(p.current_head);
+        p.current_head = p.current_head + T*W_actual;
+
+        --get the smallest angle
+        if(p.current_head < -math.pi) then
+        
+            p.current_head = 2*math.pi + p.current_head;            
+        elseif(p.current_head > math.pi) then
+        
+            p.current_head = p.current_head - 2*math.pi;
+        end
+
+        if (i == 1) then
+
+            x_ref = p.current_x
+            y_ref = p.current_y
+    
+            xdot_robot = 0  --initialize variables to 0
+            ydot_robot = 0
+            xdot_goal = 0
+            ydot_goal = 0
+
+            theta_ref_old = 0
+
+            robot_x = 0 
+            robot_y = 0
+            robot_head = 0
+
+            repel_count_0 = 1
+            robot_repel_0 = 0.05
+
+            repel_count_1 = 1
+            robot_repel_1 = 0.05
+
+            repel_count_2 = 1
+            robot_repel_2 = 0.05
+
+            repel_count_3 = 1
+            robot_repel_3 = 0.05
+
+            repel_active = 0
+
+            d_robot_0 = 0
+            d_robot_1 = 0
+            d_robot_2 = 0
+            d_robot_3 = 0
+
+            d_robot_0_old = r_robot
+            d_robot_1_old = r_robot
+            d_robot_2_old = r_robot
+            d_robot_3_old = r_robot
+
+            W_goal_heading = 0
+
+            formation_ready = 0
+            formation_ready_latch = 0
+            heading_ready = 0
+            heading_flag = 0
+
+            robot_active = 1
+
+            change_state = 0
+        end
+
+        if formation_ready == 1 then
+
+            --print("formation ready 0")
+
+            robot_active = 1
+
+            x_goal = goal.current_x
+            y_goal = goal.current_y
+
+            x_diff = x_goal - p.current_x
+            y_diff = y_goal - p.current_y
+
+            d_goal = math.sqrt((x_diff*x_diff) + (y_diff*y_diff)) --calculate distance from robot to goal
+
+            --theta_goal = atan2((y_goal - p.current_y),(p.current_x - swarm(r,1)))  --angle to goal
+            if (x_diff > 0) then
+                theta_goal = math.atan(y_diff/x_diff)
+            elseif (x_diff < 0 and y_diff > 0) then
+                theta_goal = math.atan(y_diff/x_diff) + math.pi
+            elseif (x_diff  < 0 and y_diff < 0) then
+                theta_goal = math.atan(y_diff/x_diff ) - math.pi
+            elseif (x_diff  == 0 and y_diff > 0) then
+                theta_goal = math.pi
+            elseif (x_diff  == 0 and y_diff < 0) then
+                theta_goal = -math.pi
+            elseif (x_diff  == 0 and y_diff == 0) then
+                theta_goal = 0
+            end
+
+            if (math.abs(theta_goal) - math.abs(p.current_head) > 0) then
+                W_goal_heading = 20
+            else
+                W_goal_heading = -20
+            end
+            
+            if math.deg(math.abs(p.current_head - theta_goal)) < 5 then
+                heading_ready = 1
+            end
+
+            if heading_ready == 1 and heading_flag_0 == 1 and heading_flag_1 == 1 and heading_flag_2 == 1 then
+                heading_flag = 1
+            end
+
+            if (heading_ready == 1) then
+                --equate xdot and ydot according to which boundary around the goal
+                --the robot is in..
+                if d_goal < r_goal then
+                    xdot_goal = 0;
+                    ydot_goal = 0;
+                elseif d_goal >= r_goal then --and d_goal <= s_goal + r_goal 
+                    xdot_goal = alpha_goal*(d_goal-r_goal)*math.cos(theta_goal);
+                    ydot_goal = alpha_goal*(d_goal-r_goal)*math.sin(theta_goal);
+                end
+            end
+        end
+
+        r = 0 -- leader is robot 0
+
+        for robot = 0,3,1 do
+
+            if robot == 0 then
+                robot_x = p.current_x
+                robot_y = p.current_y
+                robot_head = p.current_head
+            elseif robot == 1 then
+                robot_x = p0.current_x
+                robot_y = p0.current_y
+                robot_head = p0.current_head                    
+            elseif robot == 2 then
+                robot_x = p1.current_x
+                robot_y = p1.current_y
+                robot_head = p1.current_head   
+            elseif robot == 3 then
+                robot_x = p2.current_x
+                robot_y = p2.current_y
+                robot_head = p2.current_head   
+            end
+
+            d_robot = math.sqrt((p.current_x - robot_x)^2 + (p.current_y - robot_y)^2);
+
+            --theta_robot = atan2((swarm(robot,2) - swarm(r,2)),(swarm(robot,1) - swarm(r,1)));
+            x_d = robot_x - p.current_x 
+            y_d = robot_y - p.current_y 
+
+            if (x_d > 0) then
+                theta_robot = math.atan(y_d/x_d)
+            elseif (x_d < 0 and y_d > 0) then
+                theta_robot = math.atan(y_d/x_d) + math.pi
+            elseif (x_d < 0 and y_d < 0) then
+                theta_robot = math.atan(y_d/x_d) - math.pi
+            elseif (x_d == 0 and y_d > 0) then
+                theta_robot = math.pi
+            elseif (x_d == 0 and y_d < 0) then
+                theta_robot = -math.pi
+            elseif (x_d == 0 and y_d == 0) then
+                theta_robot = 0
+            end
+
+            if robot == 0 then
+                d_robot_0 = d_robot
+            elseif robot == 1 then
+                d_robot_1 = d_robot
+            elseif robot == 2 then
+                d_robot_2 = d_robot
+            elseif robot == 3 then
+                d_robot_3 = d_robot
+            end
+
+            if d_robot == 0 then
+                xdot_robot = xdot_robot + 0;
+                ydot_robot = ydot_robot + 0;
+            elseif math.abs(d_robot) < r_robot then
+                if robot == 0 then
+                    xdot_robot = xdot_robot - robot_repel_0*math.cos(theta_robot);
+                    ydot_robot = ydot_robot - robot_repel_0*math.sin(theta_robot);
+                    if (repel_count_0 == 1) then
+                        xdot_goal = 0
+                        ydot_goal = 0
+                    end
+                    d_robot_0 = d_robot
+                    repel_count_0 = repel_count_0 + 1;
+                elseif robot == 1 then
+                    xdot_robot = xdot_robot - robot_repel_1*math.cos(theta_robot);
+                    ydot_robot = ydot_robot - robot_repel_1*math.sin(theta_robot);
+                    if (repel_count_1 == 1) then
+                        xdot_goal = 0
+                        ydot_goal = 0
+                    end
+                    d_robot_1 = d_robot
+                    repel_count_1 = repel_count_1 + 1;
+                elseif robot == 2 then
+                    xdot_robot = xdot_robot - robot_repel_2*math.cos(theta_robot);
+                    ydot_robot = ydot_robot - robot_repel_2*math.sin(theta_robot);
+                    if (repel_count_2 == 1) then
+                        xdot_goal = 0
+                        ydot_goal = 0
+                    end
+                    d_robot_2 = d_robot
+                    repel_count_2 = repel_count_2 + 1;
+                elseif robot == 3 then
+                    xdot_robot = xdot_robot - robot_repel_3*math.cos(theta_robot);
+                    ydot_robot = ydot_robot - robot_repel_3*math.sin(theta_robot);
+                    if (repel_count_3 == 1) then
+                        xdot_goal = 0
+                        ydot_goal = 0
+                    end
+
+                    d_robot_3 = d_robot
+                    repel_count_3 = repel_count_3 + 1;
+                end
+            elseif d_robot == r_robot then
+                xdot_robot = xdot_robot + 0;
+                ydot_robot = ydot_robot + 0;
+                repel_count_0 = 1;
+                robot_repel_0 = robot_repel_0 - 0.05
+                repel_count_1 = 1;
+                robot_repel_1 = robot_repel_1 - 0.05
+                repel_count_2 = 1;
+                robot_repel_2 = robot_repel_2 - 0.05
+                alpha_goal = 0.3
+            elseif d_robot > r_robot then
+                xdot_robot = xdot_robot + alpha_robot*(d_robot-r_robot)*math.cos(theta_robot);
+                ydot_robot = ydot_robot + alpha_robot*(d_robot-r_robot)*math.sin(theta_robot);
+                repel_count_0 = 1;
+                robot_repel_0 = robot_repel_0 - 0.05
+                repel_count_1 = 1;
+                robot_repel_1 = robot_repel_1 - 0.05
+                repel_count_2 = 1;
+                robot_repel_2 = robot_repel_2 - 0.05
+                repel_count_3 = 1;
+                robot_repel_3 = robot_repel_3 - 0.05
+                alpha_goal = 0.3
+            end
+
+            if (math.abs(d_robot_0 - r_robot) > math.abs(d_robot_0_old - r_robot) and robot_repel_0 < 0.35 and repel_count_0 > 1) then
+                robot_repel_0 = robot_repel_0 + 0.05
+            else
+                robot_repel_0 = robot_repel_0 - 0.05
+            end
+
+            if (math.abs(d_robot_1 - r_robot) > math.abs(d_robot_1_old - r_robot) and robot_repel_1 < 0.35 and repel_count_1 > 1) then
+                robot_repel_1 = robot_repel_1 + 0.05
+            else
+                robot_repel_1 = robot_repel_1 - 0.05
+            end
+
+            if (math.abs(d_robot_2 - r_robot) > math.abs(d_robot_2_old - r_robot) and robot_repel_2 < 0.35 and repel_count_2 > 1) then
+                robot_repel_2 = robot_repel_2 + 0.05
+            else
+                robot_repel_2 = robot_repel_2 - 0.05
+            end
+
+            if (math.abs(d_robot_3 - r_robot) > math.abs(d_robot_3_old - r_robot) and robot_repel_3 < 0.35 and repel_count_3 > 1) then
+                robot_repel_3 = robot_repel_3 + 0.05
+            else
+                robot_repel_3 = robot_repel_3 - 0.05
+            end
+
+            if robot_repel_0 < 0.05 then
+                robot_repel_0 = 0.05
+            end
+            if robot_repel_1 < 0.05 then
+                robot_repel_1 = 0.05
+            end
+            if robot_repel_2 < 0.05 then
+                robot_repel_2 = 0.05
+            end  
+
+            if robot_repel_3 < 0.05 then
+                robot_repel_3 = 0.05
+            end
+        end
+
+        R_R0_distance = math.sqrt((p.current_x - p0.current_x)^2 + (p.current_y - p0.current_y)^2)
+        R0_R1_distance = math.sqrt((p0.current_x - p1.current_x)^2 + (p0.current_y - p1.current_y)^2)
+        R_R1_distance = math.sqrt((p.current_x - p1.current_x)^2 + (p.current_y - p1.current_y)^2)
+        R_R2_distance = math.sqrt((p.current_x - p2.current_x)^2 + (p.current_y - p2.current_y)^2)
+        R1_R2_distance = math.sqrt((p1.current_x - p2.current_x)^2 + (p1.current_y - p2.current_y)^2)
+        R0_R2_distance = math.sqrt((p0.current_x - p2.current_x)^2 + (p0.current_y - p2.current_y)^2)
+
+        if math.abs(R_R0_distance - r_robot) < 0.1 and math.abs(R_R1_distance - r_robot) < 0.1 then
+            robot_active = 0
+        end
+
+        formation_ready_latch = formation_ready
+
+        if formation_ready_latch == 0 and heading_ready == 0 then
+            xdot_goal = 0
+            ydot_goal = 0
+            print("hello 0")
+        elseif formation_ready_latch == 1 and heading_flag == 1 then
+            if change_state == 0 then --reset reference coords
+                x_ref = p.current_x
+                y_ref = p.current_y
+            end 
+            change_state = 1
+            robot_active = 1
+            xdot_goal = 0
+            ydot_goal = 0        
+            xdot_robot = xdot_robot * 1
+            ydot_robot = ydot_robot  * 1
+            print("hello 1")
+        elseif formation_ready_latch == 1 and heading_ready == 0 then
+            robot_active = 1
+            xdot_goal = 0
+            ydot_goal = 0            
+            xdot_robot = 0
+            ydot_robot = 0
+            print("hello 2")
+        elseif  formation_ready_latch == 1 and heading_flag == 0 and heading_ready == 1 then
+            robot_active = 0
+            xdot_goal = 0
+            ydot_goal = 0            
+            xdot_robot = 0
+            ydot_robot = 0  
+            print("hello 3")
+        end
+        
+        if math.abs(R_R0_distance - r_robot) < 0.2 and math.abs(R0_R1_distance - r_robot) < 0.2 and math.abs(R_R1_distance - r_robot) < 0.2 and math.abs(R_R2_distance - r_robot) < 0.2 then
+            formation_ready = 1   
+        end
+
+        --find the resultant xdot and ydot
+        xdot = xdot_goal + xdot_robot
+        ydot = ydot_goal + ydot_robot
+
+        --Integrate xdot and ydot to get desired x and y coordinate for robot to
+        --follow (Euler method)
+        x_ref = x_ref + T*xdot
+        y_ref = y_ref + T*ydot 
+
+        --theta_ref = math.atan2(ydot,xdot)
+        if (xdot > 0) then
+            theta_ref = math.atan(ydot/xdot)
+        elseif (xdot < 0 and ydot > 0) then
+            theta_ref = math.atan(ydot/xdot) + math.pi
+        elseif (xdot < 0 and ydot < 0) then
+            theta_ref = math.atan(ydot/xdot) - math.pi
+        elseif (xdot == 0 and ydot > 0) then
+            theta_ref = math.pi
+        elseif (xdot == 0 and ydot < 0) then
+            theta_ref = -math.pi
+        elseif (xdot == 0 and ydot == 0) then
+            theta_ref = 0
+        end
+       
+        v_ref = math.sqrt((xdot*xdot) + (ydot*ydot))
+
+        if(theta_ref > math.rad(160) and theta_ref_old < 0 ) then--clockwise
+            theta_diff = theta_ref - theta_ref_old - 2*math.pi;
+        elseif(theta_ref < 0 and theta_ref_old > math.rad(160) ) then --anti-clockwise
+            theta_diff = theta_ref - theta_ref_old + 2*math.pi;
+        else
+            theta_diff = theta_ref - theta_ref_old;
+        end
+
+        if theta_diff > 0.1 then 
+            W_ref = 0
+        else
+            W_ref = (theta_diff)/T;
+        end
+
+        k1 = 2*zeta*math.sqrt((W_ref*W_ref) + (beta*v_ref*v_ref))
+        k2 = beta
+        k3 = k1
+
+        theta_error = theta_ref - p.current_head
+        
+        --get the smallest angle
+        if(theta_error < -math.pi) then          
+            theta_error = 2*math.pi + theta_error;            
+        elseif(theta_error > math.pi) then           
+            theta_error = theta_error - 2*math.pi;
+        end
+
+        v = v_ref*math.cos(theta_error) + k1*((math.cos(p.current_head)*(x_ref - p.current_x)) + (math.sin(p.current_head)*(y_ref-p.current_y)))
+
+        if (theta_error ~= 0) then
+            tmp1_1 = math.sin(theta_error)/(theta_error)
+        else 
+            tmp1_1 = 0
+        end
+
+        tmp1 = k2*v_ref*tmp1_1*((math.cos(p.current_head)*(y_ref - p.current_y)) - (math.sin(p.current_head)*(x_ref-p.current_x)))
+
+        W = W_ref + tmp1 + k3*(theta_error)
+
+        if (formation_ready == 1 and heading_ready == 0) then 
+            W = W_goal_heading
+            v = 0
+        end
+
+        -- Solving the simultaneous eqns for right and left wheels
+        local W_right = 48.78*v + 2.156*W
+        local W_left = 48.78*v - 2.156*W  
+        
+        local v_left = 0.0205*W_left --v=rW to get required velocities
+        local v_right = 0.0205*W_right
+
+        --relationship between v and khepera speed
+        left_motor_speed = v_left 	--1000 factor due to mm to meters and kspeed defined above
+        right_motor_speed = v_right --1000 factor due to mm to meters and kspeed defined above
+
+        --repel_active = repel_count_1 == 2 or repel_count_2 == 2
+
+        if(i ~= 1 and repel_count_1 ~= 2 and repel_count_2 ~= 2) then
+            if robot_active == 1 then
+                --set the calculated required motor speeds
+                simExtK3_setVelocity(k3Handle,left_motor_speed,right_motor_speed)
+            else
+                simExtK3_setVelocity(k3Handle,0,0)
+            end
+        end
+--[[
+        print("///////////////////////////////")
+        print("Robot Information")
+        print("xdot robot: "..xdot_robot..", ydot_robot: "..ydot_robot.."\nxdot goal: "..xdot_goal.." , ydot_goal: "..ydot_goal)
+        print(" xdot: "..xdot.."  ydot: "..ydot)
+        print("xref: "..x_ref.."  yref: "..y_ref)
+        print("current coords: "..p.current_x.." , "..p.current_y)
+        print("heading: "..math.deg(p.current_head))
+        print("v_ref: "..v_ref.." W_ref: "..W_ref)
+        print("v: "..v.."\n W: "..W)
+        print("left: "..left_motor_speed.."  ,  right: "..right_motor_speed)
+        print("formation_ready: "..formation_ready)
+        print("heading ready: "..heading_ready)
+        print("heading flag: "..heading_flag)
+        print(" ")
+        print("///////////////////////////////")
+
+--]]
+        oldPos_left = currentPos_left
+        oldPos_right = currentPos_right
+       
+        theta_ref_old = theta_ref
+    
+        i = i + 1 
+
+        xdot_robot = 0
+        ydot_robot = 0
+
+end
+
+goalOdometry=function()
+
+    v_goal = 0.05
+    W_goal = 0
+
+    --Euler Eqns updating position (change from here)
+    goal.current_x = goal.current_x + T*v_goal*math.cos(goal.current_head);
+    goal.current_y = goal.current_y + T*v_goal*math.sin(goal.current_head);
+    goal.current_head = goal.current_head + T*W_goal;
+
+    --get the smallest angle
+    if(goal.current_head < -math.pi) then   
+        goal.current_head = 2*math.pi + goal.current_head;            
+    elseif(goal.current_head > math.pi) then   
+        goal.current_head = goal.current_head - 2*math.pi;
+    end
+
+end
+    
+
+threadFunction=function()
+
+    while simGetSimulationState()~=sim_simulation_advancing_abouttostop do 
+
+        odometryFunction()
+
+        if (formation_ready == 1 and heading_flag == 1) then      
+            goalOdometry()
+        end
+
+        next_interrupt_time = simGetSimulationTime() + 0.02
+
+        while(simGetSimulationTime() < next_interrupt_time) do
+            communicationFunction()
+        end
+
+    end
+end
+
+-- Initialization:
+-- Check if the required extension module is there:
+-- ************************************************
+moduleName=0
+moduleVersion=0
+index=0
+kheperaModuleNotFound=true
+while moduleName do
+    moduleName,moduleVersion=simGetModuleName(index)
+    if (moduleName=='K3') then
+        kheperaModuleNotFound=false
+    end
+    index=index+1
+end
+if (kheperaModuleNotFound) then
+    simDisplayDialog('Error','Khepera3 plugin was not found. (v_repExtK3.dll)&&nSimulation will not run properly',sim_dlgstyle_ok,true,nil,{0.8,0,0,0,0,0},{0.5,0,0,1,1,1})
+end
+-- ************************************************
+
+-- Create the K3 object:
+local wheelMotorHandles={simGetObjectHandle('K3_leftWheelMotor'),simGetObjectHandle('K3_rightWheelMotor')}
+local colorSensorHandles={simGetObjectHandle('K3_colorSensorLeft'),simGetObjectHandle('K3_colorSensorRight')}
+local irSensorHandles={}
+for i=1,9,1 do
+    irSensorHandles[#irSensorHandles+1]=simGetObjectHandle('K3_infraredSensor'..i)
+end
+local usSensorHandles={}
+for i=1,5,1 do
+    usSensorHandles[#usSensorHandles+1]=simGetObjectHandle('K3_ultrasonicSensor'..i)
+end
+local armMotorHandles={-1,-1,-1,-1,-1,-1}
+armMotorHandles[1]=simGetObjectHandle('K3_gripper_armJoint1')
+armMotorHandles[2]=simGetObjectHandle('K3_gripper_armJoint2')
+armMotorHandles[3]=simGetObjectHandle('K3_gripper_armAuxJoint1')
+armMotorHandles[4]=simGetObjectHandle('K3_gripper_armAuxJoint2')
+armMotorHandles[5]=simGetObjectHandle('K3_gripper_armAuxJoint3')
+armMotorHandles[6]=simGetObjectHandle('K3_gripper_armAuxJoint4')
+local fingerMotorHandles={-1,-1,-1}
+fingerMotorHandles[1]=simGetObjectHandle('K3_gripper_fingers')
+fingerMotorHandles[2]=simGetObjectHandle('K3_gripper_fingersAux')
+fingerMotorHandles[3]=simGetObjectHandle('K3_gripper_fingersAux0')
+local gripperDistSensHandles={simGetObjectHandle('K3_gripper_leftDistanceSensor'),simGetObjectHandle('K3_gripper_rightDistanceSensor')}
+local gripperColSensHandles={simGetObjectHandle('K3_gripper_leftColorSensor'),simGetObjectHandle('K3_gripper_rightColorSensor')}
+local uiHandle=simGetUIHandle('K3_stateVisualization')
+
+k3Handle=simExtK3_create(wheelMotorHandles,colorSensorHandles,irSensorHandles,usSensorHandles,armMotorHandles,fingerMotorHandles,gripperDistSensHandles,gripperColSensHandles,uiHandle)
+
+left_jointHandle=simGetObjectHandle('K3_leftWheelMotor')
+right_jointHandle=simGetObjectHandle('K3_rightWheelMotor')
+previousPos_left=simGetJointPosition(left_jointHandle)
+previousPos_right=simGetJointPosition(right_jointHandle)
+oldPos_left = simExtK3_getEncoder(k3Handle, 0)
+oldPos_right = simExtK3_getEncoder(k3Handle, 1)
+-- Now follow the black line and grasp an object:
+maxVel=2*math.pi
+
+-- Here we execute the regular thread code:
+res,err=xpcall(threadFunction,function(err) return debug.traceback(err) end)
+if not res then
+    simAddStatusbarMessage('Lua runtime error 2: '..err)
+end
+
+
+-- Clean-up:
+-- Destroy the K3 object:
+simExtK3_destroy(k3Handle)
+
